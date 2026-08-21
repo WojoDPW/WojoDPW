@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fantasy-forecast"
+version = "0.1.0"
+description = "Week-to-week full-PPR fantasy football scoring forecasts for all active NFL players, sourced from espn-api."
+requires-python = ">=3.8"
+dependencies = [
+    "espn-api==0.46.0",
+]
+
+[project.scripts]
+fantasy-forecast = "fantasy_forecast.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["fantasy_forecast*"]

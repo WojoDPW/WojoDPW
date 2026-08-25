@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// Draft board sync store — a single shared document holding who's drafted whom
+// and the league settings, read and written by every viewer of draft_board/index.html.
+//
+// No login is required by the app (same trust model as a link anyone in the league
+// can open), so these rules just scope access to that one document rather than
+// gating by identity. Paste this into Firebase Console -> Firestore Database ->
+// Rules for the draft-board-a5366 project, then Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /draftBoard/state {
+      allow read, write: if true;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

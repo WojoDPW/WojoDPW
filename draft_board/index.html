@@ -1198,27 +1198,61 @@ footer.note button:hover{ color:var(--bad); }
 {"gibbsj1":{"by":"me","at":1787623587774,"keeper":true},"purdyb1":{"by":"me","at":1787623614084,"keeper":true}}
 </script>
 
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, deleteField } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+// Public client config for the shared Firestore project backing this board — safe to
+// expose (this is how every Firebase web app ships); actual access control lives in
+// this project's Firestore security rules, not in keeping this object secret.
+const firebaseConfig = {
+  apiKey: "AIzaSyCODXZkZrljTGEsqOfAAuFin6xpAZ3id6s",
+  authDomain: "draft-board-a5366.firebaseapp.com",
+  projectId: "draft-board-a5366",
+  storageBucket: "draft-board-a5366.firebasestorage.app",
+  messagingSenderId: "182530702794",
+  appId: "1:182530702794:web:b1a4ad9867c8d1be166333",
+  measurementId: "G-V9CGSKKQYK",
+};
+const firestoreDb = getFirestore(initializeApp(firebaseConfig));
+
 (function(){
   const PLAYERS = JSON.parse(document.getElementById('players-data').textContent);
   const SOS = JSON.parse(document.getElementById('sos-data').textContent);
   const SOS_TIER_LABEL = { easy: 'Easy', mid: 'Medium', hard: 'Hard' };
+
   // DRAFTED[pid] = { by: 'me' | 'other', at: <ms timestamp>, keeper: true|false }
   // keeper: true means this player was already on that team's roster (a carried-over
   // keeper), not picked in this draft — excluded from the live pick count below.
-  let DRAFTED = JSON.parse(document.getElementById('drafted-data').textContent || '{}');
-  // migrate any legacy boolean/empty-object shape (pre "who drafted" feature) to 'other'
-  Object.keys(DRAFTED).forEach(pid => {
-    const v = DRAFTED[pid];
-    if (!v || typeof v !== 'object' || !v.by) DRAFTED[pid] = { by: 'other', at: (v && v.at) || Date.now(), keeper: false };
-    else if (v.keeper === undefined) v.keeper = false;
-  });
-
+  // Shared across every viewer via Firestore (see the sync block below); shaped here
+  // so a value straight out of Firestore (or the embedded seed) is always well-formed.
+  function migrateDrafted(raw){
+    const out = {};
+    Object.keys(raw || {}).forEach(pid => {
+      const v = raw[pid];
+      if (!v || typeof v !== 'object' || !v.by) out[pid] = { by: 'other', at: (v && v.at) || Date.now(), keeper: false };
+      else out[pid] = { by: v.by, at: v.at || Date.now(), keeper: !!v.keeper };
+    });
+    return out;
+  }
   // LEAGUE = { teams, rounds, mySlot } — snake-draft settings for the round/pick tracker.
-  let LEAGUE = JSON.parse(document.getElementById('league-data').textContent || '{}');
-  if (!LEAGUE.teams) LEAGUE.teams = 12;
-  if (!LEAGUE.rounds) LEAGUE.rounds = 16;
-  if (!LEAGUE.mySlot) LEAGUE.mySlot = 1;
+  function normalizeLeague(raw){
+    raw = raw || {};
+    return {
+      teams: raw.teams || 12,
+      rounds: raw.rounds || 16,
+      mySlot: raw.mySlot || 1,
+    };
+  }
+
+  // Baked in at publish time; used only to seed the shared Firestore document the
+  // very first time this board is opened. Once Firestore has a document, live state
+  // always comes from there — these two are never read again after startup.
+  const SEED_DRAFTED = JSON.parse(document.getElementById('drafted-data').textContent || '{}');
+  const SEED_LEAGUE = JSON.parse(document.getElementById('league-data').textContent || '{}');
+
+  let DRAFTED = migrateDrafted(SEED_DRAFTED);
+  let LEAGUE = normalizeLeague(SEED_LEAGUE);
 
   const POS_META = {
     QB: { label: 'Quarterbacks', color: 'var(--qb)' },
@@ -1353,38 +1387,35 @@ footer.note button:hover{ color:var(--bad); }
     } catch(e){}
   }
 
-  // ---------- artifact sync capability ----------
-  let artifactCap = null;
-  let publishing = false;
-  let readOnly = false;
-
+  // ---------- Firestore sync (shared draft state — every viewer sees every pick) ----------
   function setPill(state, text){
     syncPill.className = 'sync-pill ' + state;
     syncPill.textContent = text;
   }
 
-  function enterReadOnlyMode(){
-    if (readOnly) return;
-    readOnly = true;
-    setPill('err', 'read-only — ask the board owner for edit access to mark picks');
-    document.querySelectorAll('.owner-btn:not(.watch), .keeper-check').forEach(b => { b.disabled = true; b.title = 'Read-only view'; });
-    rtSettingsBtn.disabled = true;
-    rtSettingsBtn.title = 'Read-only view';
-    rtSettingsPanel.hidden = true;
-  }
+  const draftDocRef = doc(firestoreDb, 'draftBoard', 'state');
+  let firstSnapshot = true;
 
-  (function initCapability(){
-    if (typeof window.claude === 'undefined' || !window.claude.use){
-      setPill('err', 'sync unavailable — saving on this device only');
+  onSnapshot(draftDocRef, snap => {
+    if (!snap.exists()){
+      // Nobody has saved to this board yet — seed it from the values baked into
+      // this page so the shared document starts from what was live when published.
+      if (firstSnapshot) setDoc(draftDocRef, { drafted: SEED_DRAFTED, league: SEED_LEAGUE }).catch(() => {});
+      firstSnapshot = false;
       return;
     }
-    window.claude.use('artifact').then(cap => {
-      artifactCap = cap;
-      setPill(cap ? 'live' : 'err', cap ? 'synced' : 'sync unavailable — saving on this device only');
-    }).catch(() => {
-      setPill('err', 'sync unavailable — saving on this device only');
-    });
-  })();
+    firstSnapshot = false;
+    const data = snap.data();
+    DRAFTED = migrateDrafted(data.drafted);
+    LEAGUE = normalizeLeague(data.league);
+    refreshMyTeamChip();
+    populateRoundFilter(currentRound);
+    renderRoundTracker();
+    renderCurrentView();
+    setPill('live', 'synced');
+  }, () => {
+    setPill('err', 'sync unavailable — check your connection');
+  });
 
   function esc(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1626,10 +1657,10 @@ footer.note button:hover{ color:var(--bad); }
         </button>
         <div class="owner-toggle">
           <button type="button" class="owner-btn watch" data-active="${watched}" aria-label="${watched ? 'Remove from watch list' : 'Add to watch list'}" title="${watched ? 'Remove from watch list' : 'Add to watch list'}">${watched ? '★' : '☆'}</button>
-          <button type="button" class="owner-btn mine" data-active="${owner === 'me'}"${readOnly ? ' disabled title="Read-only view"' : ''}>Mine</button>
-          <button type="button" class="owner-btn theirs" data-active="${owner === 'other'}"${readOnly ? ' disabled title="Read-only view"' : ''}>Taken</button>
+          <button type="button" class="owner-btn mine" data-active="${owner === 'me'}">Mine</button>
+          <button type="button" class="owner-btn theirs" data-active="${owner === 'other'}">Taken</button>
           <label class="keeper-toggle" title="Keeper — already on that roster from a prior season, doesn't count as a pick in this draft">
-            <input type="checkbox" class="keeper-check" ${isKeeper ? 'checked' : ''}${(!owner || readOnly) ? ' disabled' : ''}>
+            <input type="checkbox" class="keeper-check" ${isKeeper ? 'checked' : ''}${!owner ? ' disabled' : ''}>
             Keeper
           </label>
         </div>
@@ -1917,68 +1948,25 @@ footer.note button:hover{ color:var(--bad); }
     tabsEl.appendChild(btn);
   });
 
-  // ---------- publishing drafted state + league settings ----------
-  function replaceDataBlock(html, id, obj){
-    const marker = new RegExp(`(<script id="${id}" type="application\\/json">)([\\s\\S]*?)(<\\/script>)`);
-    if (!marker.test(html)) throw new Error(`template marker not found: ${id}`);
-    return html.replace(marker, (m, open, _old, close) => open + '\n' + JSON.stringify(obj) + '\n' + close);
-  }
-
-  async function persistState(){
-    if (!artifactCap){
-      try {
-        localStorage.setItem('dt_drafted_fallback', JSON.stringify(DRAFTED));
-        localStorage.setItem('dt_league_fallback', JSON.stringify(LEAGUE));
-      } catch(e){}
-      return { ok: true, local: true };
-    }
-    try {
-      const res = await fetch(location.href.split('#')[0] + (location.href.includes('?') ? '&' : '?') + '_sync=' + Date.now(), { cache: 'no-store' });
-      let html = await res.text();
-      html = replaceDataBlock(html, 'drafted-data', DRAFTED);
-      html = replaceDataBlock(html, 'league-data', LEAGUE);
-      await artifactCap.publish(html);
-      return { ok: true };
-    } catch(err){
-      return { ok: false, err };
-    }
-  }
-
-  // Shared optimistic-update + persist + rollback flow for any DRAFTED mutation
-  // (who owns a player, and separately whether they're a keeper).
-  async function commitDrafted(apply, revert){
-    if (publishing || readOnly) return;
-
-    apply();
-    refreshMyTeamChip();
-    renderCurrentView();
-
-    publishing = true;
+  // ---------- writing drafted state + league settings to Firestore ----------
+  // Each player's mark lives at its own dotted field path (drafted.<pid>) so two
+  // people marking different players at the same moment never clobber each other —
+  // only a genuine double-mark of the *same* player can race, and last-write-wins
+  // there is fine for a two-person draft.
+  async function writeDraftedField(pid, value, revert){
     setPill('busy', 'saving…');
     const allBtns = document.querySelectorAll('.owner-btn, .keeper-check');
     allBtns.forEach(b => b.disabled = true);
-
-    const result = await persistState();
-
-    allBtns.forEach(b => b.disabled = false);
-    publishing = false;
-
-    if (result.ok && !result.local){
+    try {
+      await updateDoc(draftDocRef, { [`drafted.${pid}`]: value === null ? deleteField() : value });
       setPill('live', 'synced');
-      // A successful publish() reloads this view automatically; nothing more to do.
-    } else if (result.ok && result.local){
-      setPill('err', 'sync unavailable — saving on this device only');
-    } else {
-      const code = result.err && result.err.code;
-      if (code === 'conflict'){
-        setPill('busy', 'reloading…');
-      } else {
-        revert();
-        refreshMyTeamChip();
-        renderCurrentView();
-        if (code === 'not_writer' || code === 'not_granted') enterReadOnlyMode();
-        else setPill('err', 'save failed — try again');
-      }
+    } catch(err){
+      revert();
+      refreshMyTeamChip();
+      renderCurrentView();
+      setPill('err', 'save failed — try again');
+    } finally {
+      allBtns.forEach(b => b.disabled = false);
     }
   }
 
@@ -1986,38 +1974,46 @@ footer.note button:hover{ color:var(--bad); }
     const prevEntry = DRAFTED[pid] || null;
     const prev = prevEntry ? prevEntry.by : null;
     const next = prev === who ? null : who; // clicking the active state clears it
+    const value = next === null ? null : { by: next, at: Date.now(), keeper: prevEntry ? prevEntry.keeper : false };
 
-    await commitDrafted(
-      () => {
-        if (next === null) delete DRAFTED[pid];
-        else DRAFTED[pid] = { by: next, at: Date.now(), keeper: prevEntry ? prevEntry.keeper : false };
-      },
-      () => {
-        if (prevEntry) DRAFTED[pid] = prevEntry;
-        else delete DRAFTED[pid];
-      }
-    );
+    // optimistic local update — the live Firestore snapshot confirms it moments later
+    if (value === null) delete DRAFTED[pid]; else DRAFTED[pid] = value;
+    refreshMyTeamChip();
+    renderCurrentView();
+
+    await writeDraftedField(pid, value, () => {
+      if (prevEntry) DRAFTED[pid] = prevEntry;
+      else delete DRAFTED[pid];
+    });
   }
 
   async function setKeeper(pid, checked){
     const entry = DRAFTED[pid];
     if (!entry) return; // keeper only applies once a player has an owner
     const prevKeeper = !!entry.keeper;
+    entry.keeper = checked;
+    refreshMyTeamChip();
+    renderCurrentView();
 
-    await commitDrafted(
-      () => { entry.keeper = checked; },
-      () => { entry.keeper = prevKeeper; }
-    );
+    await writeDraftedField(pid, entry, () => { entry.keeper = prevKeeper; });
   }
 
   resetBtn.addEventListener('click', async () => {
     if (!confirm('Clear all draft marks (yours and taken)? This affects everyone viewing this board.')) return;
+    const prevDrafted = DRAFTED;
     DRAFTED = {};
     refreshMyTeamChip();
     renderCurrentView();
     setPill('busy', 'saving…');
-    const result = await persistState();
-    setPill(result.ok && !result.local ? 'live' : 'err', result.ok && !result.local ? 'synced' : 'sync unavailable — saving on this device only');
+    try {
+      await updateDoc(draftDocRef, { drafted: {} });
+      setPill('live', 'synced');
+    } catch(err){
+      DRAFTED = prevDrafted;
+      refreshMyTeamChip();
+      renderCurrentView();
+      setPill('err', 'save failed — try again');
+    }
   });
 
   // ---------- league settings panel ----------
@@ -2034,7 +2030,6 @@ footer.note button:hover{ color:var(--bad); }
   rtCancelSettings.addEventListener('click', () => { rtSettingsPanel.hidden = true; });
 
   rtSaveSettings.addEventListener('click', async () => {
-    if (publishing || readOnly) return;
     const teams = Math.max(2, Math.min(32, parseInt(rtTeamsInput.value, 10) || LEAGUE.teams));
     const rounds = Math.max(1, Math.min(40, parseInt(rtRoundsInput.value, 10) || LEAGUE.rounds));
     const mySlot = Math.max(1, Math.min(teams, parseInt(rtSlotInput.value, 10) || LEAGUE.mySlot));
@@ -2046,32 +2041,20 @@ footer.note button:hover{ color:var(--bad); }
     renderCurrentView();
     rtSettingsPanel.hidden = true;
 
-    publishing = true;
     setPill('busy', 'saving…');
     rtSaveSettings.disabled = true;
 
-    const result = await persistState();
-
-    rtSaveSettings.disabled = false;
-    publishing = false;
-
-    if (result.ok && !result.local){
+    try {
+      await updateDoc(draftDocRef, { league: LEAGUE });
       setPill('live', 'synced');
-    } else if (result.ok && result.local){
-      setPill('err', 'sync unavailable — saving on this device only');
-    } else {
-      const code = result.err && result.err.code;
-      if (code === 'conflict'){
-        setPill('busy', 'reloading…');
-      } else if (code === 'not_writer' || code === 'not_granted'){
-        LEAGUE = prevLeague;
-        renderRoundTracker();
-        enterReadOnlyMode();
-      } else {
-        LEAGUE = prevLeague;
-        renderRoundTracker();
-        setPill('err', 'save failed — try again');
-      }
+    } catch(err){
+      LEAGUE = prevLeague;
+      renderRoundTracker();
+      populateRoundFilter(currentRound);
+      renderCurrentView();
+      setPill('err', 'save failed — try again');
+    } finally {
+      rtSaveSettings.disabled = false;
     }
   });
 

@@ -125,15 +125,39 @@ access.
 
 [`draft_board/index.html`](draft_board/index.html) is a self-contained draft
 board built from this tool's forecast output (`ffPts`), plus ADP, strength
-of schedule, and health data. It's a single static HTML file with no
-external dependencies beyond a Google Fonts stylesheet — open it directly
-in a browser, no server required.
+of schedule, and health data. It's a single static HTML file — no build
+step, no server-side code — that anyone can open directly in a browser.
 
 It supports position tabs, a combined "Best Available" board, a personal
-watch list, name search, a round filter, and marking players as drafted
-(by you, by someone else, or as a keeper — keepers don't count against the
-live round/pick tracker). Draft marks and league settings save to
-`localStorage` in whatever browser has the file open; there's no sync
-between devices for this static copy. This is a point-in-time snapshot —
-regenerating it for a future draft means rebuilding the player/SOS data and
-resetting the embedded draft marks.
+watch list, name search, a round filter, and marking players as drafted (by
+you, by someone else, or as a keeper — keepers don't count against the live
+round/pick tracker).
+
+**Shared state** (who's drafted, league settings) syncs in real time through
+a small [Firestore](https://firebase.google.com/docs/firestore) database —
+every viewer with the page open sees every mark within moments, with no
+login required. Personal state (your watch list, which tab you're on) stays
+local to your own browser via `localStorage`/`sessionStorage` and is never
+shared. The Firebase project config embedded in the page is a public client
+identifier, not a secret; actual access is scoped by
+[`draft_board/firestore.rules`](draft_board/firestore.rules).
+
+### Hosting it
+
+1. Create a free Firebase project, enable **Firestore Database** (start in
+   test mode), then paste `draft_board/firestore.rules` into
+   **Firestore Database → Rules → Publish**.
+2. Register a web app in that project and drop its config object into the
+   `firebaseConfig` constant near the top of `draft_board/index.html`'s
+   script (already done for the `draft-board-a5366` project this board
+   currently points at — swap it if you fork this for a different league).
+3. Serve the file anywhere static — **GitHub Pages** is the path of least
+   resistance since it's already in this repo: repo **Settings → Pages →
+   Deploy from a branch**, pick the branch containing this file, and share
+   the resulting URL with your co-manager(s). No Firebase Hosting, no CLI
+   login, no server to run.
+
+This is a living tool, not a point-in-time snapshot: draft marks and league
+settings live in Firestore, not baked into the file, so the same deployed
+page carries forward from draft to draft. To reset for a new season, use
+the in-app "Clear all draft marks" control rather than editing the file.

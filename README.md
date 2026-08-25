@@ -120,3 +120,20 @@ python -m unittest discover -s tests -v
 
 All tests run against synthetic in-memory data and don't require network
 access.
+
+## Draft board
+
+[`draft_board/index.html`](draft_board/index.html) is a self-contained draft
+board built from this tool's forecast output (`ffPts`), plus ADP, strength
+of schedule, and health data. It's a single static HTML file with no
+external dependencies beyond a Google Fonts stylesheet — open it directly
+in a browser, no server required.
+
+It supports position tabs, a combined "Best Available" board, a personal
+watch list, name search, a round filter, and marking players as drafted
+(by you, by someone else, or as a keeper — keepers don't count against the
+live round/pick tracker). Draft marks and league settings save to
+`localStorage` in whatever browser has the file open; there's no sync
+between devices for this static copy. This is a point-in-time snapshot —
+regenerating it for a future draft means rebuilding the player/SOS data and
+resetting the embedded draft marks.

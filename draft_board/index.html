@@ -644,6 +644,15 @@ ol.roster{
   white-space:nowrap;
 }
 
+.team-tag{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:0.7rem;
+  font-weight:500;
+  color:var(--ink-faint);
+  letter-spacing:0.02em;
+  margin-left:0.45rem;
+}
+
 .sos-pill{
   font-family:'IBM Plex Mono', monospace;
   font-size:0.62rem;
@@ -1548,7 +1557,7 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
     const games = gamesExpected(p);
     const ppw = p.ffPts != null ? p.ffPts / games : null;
     const tiles = [
-      { label: 'Team', value: esc(p.team) },
+      { label: 'Bye Week', value: p.bye ? esc(p.bye) : '—' },
       { label: 'ADP by Pos', value: p.posAdpRank ? `${pos}${p.posAdpRank}` : '—' },
       { label: 'ADP Overall', value: p.adp !== null ? fmt1(p.adp) : '—' },
       { label: 'SOS', value: sosInfo ? `${sosInfo.rank}/32` : '—', sub: sosInfo ? `${SOS_TIER_LABEL[sosInfo.tier]} schedule` : null, tone: sosInfo ? sosTone(sosInfo.tier) : null },
@@ -1624,10 +1633,10 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
     const sosInfo = SOS[p.team] || null;
 
     const hWord = healthWord(p.health);
-    // Team / ADP / SOS / Proj Pts / PPW / Health now live in the smart-tile grid below;
-    // these badges hold only what the tiles don't already say.
+    // Bye Week / ADP / SOS / Proj Pts / PPW / Health now live in the smart-tile grid
+    // below (and Team sits next to the name above); these badges hold only what
+    // isn't already said elsewhere on the card.
     const badges = [];
-    if (p.bye) badges.push(`<span class="badge">Bye Wk <b>${esc(p.bye)}</b></span>`);
     if (p.posAdpRank) {
       const diff = p.posAdpRank - p.rank;
       let cls = '';
@@ -1650,7 +1659,7 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
             <span class="avatar-rank">${displayRank}</span>
           </span>
           <span class="who">
-            <span class="name">${posTag}${esc(p.name)}${ownerTag}</span>
+            <span class="name">${posTag}${esc(p.name)}<span class="team-tag">${esc(p.team)}</span>${ownerTag}</span>
           </span>
           <span class="pts"><span class="num">${fmt1(p.ffPts)}</span><span class="lbl">Proj Pts</span></span>
           <svg class="chev" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>

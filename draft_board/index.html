@@ -1175,7 +1175,7 @@ footer.note button:hover{ color:var(--bad); }
         <button type="button" class="rt-settings-btn" id="clearWatchlist">Clear watch list</button>
       </div>
     </div>
-    <p class="sub" style="margin:-0.6rem 0 1rem;">Players you've starred, across every position, sorted by ADP. Tap the star on any card to add or remove it.</p>
+    <p class="sub" style="margin:-0.6rem 0 1rem;">Players anyone has starred, across every position, sorted by ADP — shared with everyone viewing this board. Tap the star on any card to add or remove it.</p>
     <ol class="roster" id="watchRoster"></ol>
   </div>
 
@@ -1327,19 +1327,35 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
   let currentRound = 'all';
   let openPid = null;
 
-  // ---------- watch list (personal, per-device — not synced to other viewers) ----------
-  let WATCHLIST = {};
-  try { WATCHLIST = JSON.parse(localStorage.getItem('dt_watchlist') || '{}'); } catch(e){ WATCHLIST = {}; }
-  function saveWatchlist(){
-    try { localStorage.setItem('dt_watchlist', JSON.stringify(WATCHLIST)); } catch(e){}
+  // ---------- watch list (shared — synced through Firestore like drafted picks) ----------
+  // A device's pre-existing local watch list (from before this was shared) is folded
+  // into the shared one the first time this page loads after that change ships —
+  // see the one-time migration in the onSnapshot handler below.
+  let LEGACY_LOCAL_WATCHLIST = {};
+  try { LEGACY_LOCAL_WATCHLIST = JSON.parse(localStorage.getItem('dt_watchlist') || '{}'); } catch(e){}
+
+  function normalizeWatchlist(raw){
+    const out = {};
+    if (raw && typeof raw === 'object') Object.keys(raw).forEach(pid => { if (raw[pid]) out[pid] = true; });
+    return out;
   }
+  // Painted immediately from this device's old local list so there's no flash of
+  // "nothing watched" before the first Firestore snapshot confirms the shared one.
+  let WATCHLIST = normalizeWatchlist(LEGACY_LOCAL_WATCHLIST);
   function watchCount(){ return Object.keys(WATCHLIST).length; }
-  function toggleWatch(pid){
-    if (WATCHLIST[pid]) delete WATCHLIST[pid];
-    else WATCHLIST[pid] = true;
-    saveWatchlist();
+  async function toggleWatch(pid){
+    const wasWatched = !!WATCHLIST[pid];
+    if (wasWatched) delete WATCHLIST[pid]; else WATCHLIST[pid] = true;
     refreshWatchChip();
     renderCurrentView();
+
+    try {
+      await updateDoc(draftDocRef, { [`watchlist.${pid}`]: wasWatched ? deleteField() : true });
+    } catch(err){
+      if (wasWatched) WATCHLIST[pid] = true; else delete WATCHLIST[pid];
+      refreshWatchChip();
+      renderCurrentView();
+    }
   }
   function refreshWatchChip(){
     watchChip.textContent = String(watchCount());
@@ -1409,7 +1425,11 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
     if (!snap.exists()){
       // Nobody has saved to this board yet — seed it from the values baked into
       // this page so the shared document starts from what was live when published.
-      if (firstSnapshot) setDoc(draftDocRef, { drafted: SEED_DRAFTED, league: SEED_LEAGUE }).catch(() => {});
+      if (firstSnapshot){
+        setDoc(draftDocRef, { drafted: SEED_DRAFTED, league: SEED_LEAGUE, watchlist: LEGACY_LOCAL_WATCHLIST })
+          .then(() => { try { localStorage.removeItem('dt_watchlist'); } catch(e){} })
+          .catch(() => {});
+      }
       firstSnapshot = false;
       return;
     }
@@ -1417,7 +1437,16 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
     const data = snap.data();
     DRAFTED = migrateDrafted(data.drafted);
     LEAGUE = normalizeLeague(data.league);
+    // One-time upgrade: this device had a watch list back when it was local-only
+    // (no "watchlist" field on the shared doc yet) — fold it into the shared one.
+    if (data.watchlist === undefined && Object.keys(LEGACY_LOCAL_WATCHLIST).length){
+      updateDoc(draftDocRef, { watchlist: LEGACY_LOCAL_WATCHLIST })
+        .then(() => { try { localStorage.removeItem('dt_watchlist'); } catch(e){} })
+        .catch(() => {});
+    }
+    WATCHLIST = normalizeWatchlist(data.watchlist);
     refreshMyTeamChip();
+    refreshWatchChip();
     populateRoundFilter(currentRound);
     renderRoundTracker();
     renderCurrentView();
@@ -1920,13 +1949,20 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
     renderCurrentView();
     savePrefs();
   });
-  clearWatchlistBtn.addEventListener('click', () => {
+  clearWatchlistBtn.addEventListener('click', async () => {
     if (watchCount() === 0) return;
-    if (!confirm('Clear your entire watch list? This only affects your device.')) return;
+    if (!confirm('Clear the watch list? This affects everyone viewing this board.')) return;
+    const prevWatchlist = WATCHLIST;
     WATCHLIST = {};
-    saveWatchlist();
     refreshWatchChip();
     renderCurrentView();
+    try {
+      await updateDoc(draftDocRef, { watchlist: {} });
+    } catch(err){
+      WATCHLIST = prevWatchlist;
+      refreshWatchChip();
+      renderCurrentView();
+    }
   });
   btnTop10.addEventListener('click', () => selectFilter('top10'));
   btnAll.addEventListener('click', () => selectFilter('all'));

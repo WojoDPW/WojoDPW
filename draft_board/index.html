@@ -321,6 +321,130 @@ h1{
   .rt-right{ margin-left:0; width:100%; justify-content:space-between; }
 }
 
+/* Draft analytics — your roster's weekly points, position mix, bye conflicts */
+.analytics{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:1rem 1.1rem 1.15rem;
+  margin-bottom:1.4rem;
+  box-shadow:var(--shadow);
+}
+.analytics-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:0.75rem;
+  flex-wrap:wrap;
+  margin-bottom:0.95rem;
+}
+.analytics-head h2{
+  font-family:'Big Shoulders Display', sans-serif;
+  font-weight:800;
+  font-size:1.3rem;
+  letter-spacing:0.01em;
+  color:var(--accent);
+  margin:0;
+}
+.analytics-sub{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:0.7rem;
+  color:var(--ink-faint);
+  letter-spacing:0.02em;
+}
+
+.analytics-row{ margin-bottom:1rem; }
+.analytics-row:last-child{ margin-bottom:0; }
+.analytics-row-label{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:0.62rem;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  margin-bottom:0.5rem;
+}
+
+.weekly-total{
+  display:flex;
+  align-items:baseline;
+  gap:0.6rem;
+  flex-wrap:wrap;
+}
+.weekly-total .num{
+  font-family:'Big Shoulders Display', sans-serif;
+  font-weight:800;
+  font-size:2.3rem;
+  color:var(--accent);
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.weekly-total .unit{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:0.72rem;
+  color:var(--ink-faint);
+}
+
+.pos-breakdown{
+  display:flex;
+  flex-wrap:wrap;
+  gap:0.5rem;
+}
+.pos-chip{
+  display:inline-flex;
+  align-items:baseline;
+  gap:0.4rem;
+  padding:0.35rem 0.7rem;
+  border-radius:999px;
+  background:var(--surface-2);
+  border:1px solid var(--line);
+}
+.pos-chip .k{
+  font-family:'Big Shoulders Display', sans-serif;
+  font-weight:700;
+  font-size:0.8rem;
+  letter-spacing:0.03em;
+  color:var(--pos-color);
+}
+.pos-chip .v{
+  font-family:'IBM Plex Mono', monospace;
+  font-weight:600;
+  font-size:0.92rem;
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+
+.bye-clear{
+  font-size:0.85rem;
+  color:var(--ink-dim);
+  margin:0;
+}
+.bye-conflicts{
+  display:flex;
+  flex-direction:column;
+  gap:0.5rem;
+}
+.bye-conflict{
+  display:flex;
+  align-items:baseline;
+  gap:0.6rem;
+  flex-wrap:wrap;
+  padding:0.5rem 0.75rem;
+  border-radius:8px;
+  background:var(--sos-hard-bg);
+  border:1px solid var(--bad);
+}
+.bye-conflict .wk{
+  font-family:'Big Shoulders Display', sans-serif;
+  font-weight:700;
+  font-size:0.85rem;
+  color:var(--bad);
+  white-space:nowrap;
+}
+.bye-conflict .names{
+  font-size:0.82rem;
+  color:var(--ink-dim);
+}
+
 /* View switch: Draft Board vs My Team */
 .view-switch{
   display:flex;
@@ -1102,6 +1226,28 @@ footer.note button:hover{ color:var(--bad); }
     </div>
   </div>
 
+  <div class="analytics" id="analytics">
+    <div class="analytics-head">
+      <h2>Your Draft Analytics</h2>
+      <span class="analytics-sub" id="analyticsSub"></span>
+    </div>
+    <div class="analytics-row">
+      <div class="analytics-row-label">Total Weekly Points</div>
+      <div class="weekly-total">
+        <span class="num" id="analyticsWeeklyPts">0.0</span>
+        <span class="unit">proj. pts/wk across your roster</span>
+      </div>
+    </div>
+    <div class="analytics-row">
+      <div class="analytics-row-label">Drafted by Position</div>
+      <div class="pos-breakdown" id="analyticsPositions"></div>
+    </div>
+    <div class="analytics-row">
+      <div class="analytics-row-label">Bye Week Conflicts</div>
+      <div id="analyticsByes"></div>
+    </div>
+  </div>
+
   <div class="view-switch" role="tablist" aria-label="View">
     <button type="button" id="viewBoard" aria-pressed="true">Draft Board</button>
     <button type="button" id="viewBest" aria-pressed="false">Best Available</button>
@@ -1307,6 +1453,10 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
   const rtSlotInput = document.getElementById('rtSlotInput');
   const rtSaveSettings = document.getElementById('rtSaveSettings');
   const rtCancelSettings = document.getElementById('rtCancelSettings');
+  const analyticsSubEl = document.getElementById('analyticsSub');
+  const analyticsWeeklyPtsEl = document.getElementById('analyticsWeeklyPts');
+  const analyticsPositionsEl = document.getElementById('analyticsPositions');
+  const analyticsByesEl = document.getElementById('analyticsByes');
   const viewWatchBtn = document.getElementById('viewWatch');
   const watchlistViewEl = document.getElementById('watchlistView');
   const watchChip = document.getElementById('watchChip');
@@ -1806,9 +1956,54 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
     }
   }
 
+  // Your roster's weekly scoring power, position mix, and any weeks where two or
+  // more of your drafted players (keepers included) share a bye.
+  function renderAnalytics(){
+    let totalWeekly = 0;
+    let totalCount = 0;
+    const counts = {};
+    const byWeek = {};
+    ORDER.forEach(pos => {
+      counts[pos] = 0;
+      (PLAYERS[pos] || []).forEach(p => {
+        const d = DRAFTED[p.pid];
+        if (!d || d.by !== 'me') return;
+        totalCount++;
+        counts[pos]++;
+        totalWeekly += p.ffPts / gamesExpected(p);
+        if (p.bye) (byWeek[p.bye] = byWeek[p.bye] || []).push(p.name);
+      });
+    });
+
+    analyticsWeeklyPtsEl.textContent = fmt1(totalWeekly);
+    analyticsSubEl.textContent = totalCount
+      ? `${totalCount} player${totalCount === 1 ? '' : 's'} drafted`
+      : 'No players drafted yet';
+
+    analyticsPositionsEl.innerHTML = ORDER.map(pos => `
+      <span class="pos-chip" style="--pos-color:${POS_META[pos].color}">
+        <span class="k">${pos}</span><span class="v">${counts[pos]}</span>
+      </span>`).join('');
+
+    const conflictWeeks = Object.keys(byWeek)
+      .filter(wk => byWeek[wk].length > 1)
+      .sort((a, b) => Number(a) - Number(b));
+
+    if (conflictWeeks.length === 0){
+      analyticsByesEl.innerHTML = `<p class="bye-clear">${totalCount ? 'No conflicts — none of your bye weeks overlap.' : 'Draft some players to see bye week conflicts here.'}</p>`;
+    } else {
+      analyticsByesEl.innerHTML = `<div class="bye-conflicts">${conflictWeeks.map(wk => `
+        <div class="bye-conflict">
+          <span class="wk">Week ${esc(wk)}</span>
+          <span class="names">${byWeek[wk].map(esc).join(', ')}</span>
+        </div>`).join('')}</div>`;
+    }
+  }
+
   function refreshMyTeamChip(){
     myTeamChip.textContent = String(myTeamCount());
     renderRoundTracker();
+    renderAnalytics();
   }
 
   // All players, every position, ranked by overall ADP (lowest = best/earliest).

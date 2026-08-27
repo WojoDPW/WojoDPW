@@ -314,6 +314,127 @@ h1{
 #rtSaveSettings{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
 #rtCancelSettings{ background:var(--surface); color:var(--ink-dim); }
 
+/* Opponent keepers panel — search-and-add so the other teams' keepers can be
+   marked Taken before the live draft starts, without hunting through tabs. */
+.keepers-panel[hidden]{ display:none; }
+.keepers-panel{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:0.95rem 1.1rem 1.1rem;
+  margin:-0.6rem 0 1.4rem;
+  box-shadow:var(--shadow);
+}
+.keepers-panel-top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:1rem;
+  margin-bottom:0.85rem;
+}
+.keepers-panel-top h3{
+  font-family:'Big Shoulders Display', sans-serif;
+  font-weight:800;
+  font-size:1.1rem;
+  color:var(--accent);
+  margin:0 0 0.3rem;
+}
+.keepers-panel-sub{
+  font-size:0.8rem;
+  color:var(--ink-dim);
+  max-width:52ch;
+  line-height:1.5;
+  margin:0;
+}
+
+.keeper-search-wrap{ position:relative; margin-bottom:0.9rem; }
+#keeperSearchInput{
+  width:100%;
+  appearance:none;
+  border:1px solid var(--line);
+  background:var(--surface-2);
+  color:var(--ink);
+  font-family:'IBM Plex Sans', sans-serif;
+  font-size:0.9rem;
+  padding:0.55rem 0.8rem;
+  border-radius:8px;
+}
+#keeperSearchInput:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+.keeper-search-results{
+  position:absolute;
+  left:0; right:0; top:calc(100% + 4px);
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:8px;
+  box-shadow:var(--shadow);
+  z-index:5;
+  max-height:16rem;
+  overflow-y:auto;
+}
+.keeper-search-results[hidden]{ display:none; }
+.keeper-result{
+  display:flex;
+  align-items:center;
+  gap:0.5rem;
+  width:100%;
+  appearance:none;
+  border:none;
+  background:transparent;
+  padding:0.55rem 0.7rem;
+  cursor:pointer;
+  text-align:left;
+  font:inherit;
+}
+.keeper-result:hover, .keeper-result:focus-visible{ background:var(--surface-2); }
+.keeper-result .postag{ margin-right:0; }
+.keeper-result-name{ font-weight:600; font-size:0.88rem; color:var(--ink); flex:1; }
+.keeper-result-team{ font-family:'IBM Plex Mono', monospace; font-size:0.72rem; color:var(--ink-faint); }
+
+.keepers-added-list{
+  list-style:none;
+  margin:0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:0.4rem;
+  max-height:18rem;
+  overflow-y:auto;
+}
+.keepers-added-item{
+  display:flex;
+  align-items:center;
+  gap:0.55rem;
+  padding:0.45rem 0.6rem;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--surface-2);
+}
+.keepers-added-item .postag{ margin-right:0; }
+.keepers-added-name{ font-weight:600; font-size:0.85rem; color:var(--ink); flex:1; }
+.keepers-added-team{ font-family:'IBM Plex Mono', monospace; font-size:0.72rem; color:var(--ink-faint); }
+.keepers-remove{
+  appearance:none;
+  border:none;
+  background:none;
+  color:var(--ink-faint);
+  font-size:1.05rem;
+  line-height:1;
+  cursor:pointer;
+  padding:0.2rem 0.45rem;
+  border-radius:50%;
+}
+.keepers-remove:hover{ color:var(--bad); background:var(--sos-hard-bg); }
+.keepers-remove:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+.keepers-empty{
+  list-style:none;
+  padding:1rem;
+  text-align:center;
+  color:var(--ink-faint);
+  font-size:0.85rem;
+  border:1px dashed var(--line);
+  border-radius:8px;
+}
+
 @media (max-width:480px){
   .round-tracker{ padding:0.8rem 0.9rem 0.95rem; }
   .rt-main{ gap:1rem; }
@@ -1211,6 +1332,7 @@ footer.note button:hover{ color:var(--bad); }
     </div>
     <div class="rt-right">
       <span class="rt-turn" id="rtTurn"></span>
+      <button type="button" class="rt-settings-btn" id="rtKeepersBtn">Opponent Keepers</button>
       <button type="button" class="rt-settings-btn" id="rtSettingsBtn">Edit league</button>
     </div>
     <div class="rt-progress"><div class="rt-progress-fill" id="rtProgressFill"></div></div>
@@ -1224,6 +1346,21 @@ footer.note button:hover{ color:var(--bad); }
       <button type="button" id="rtSaveSettings">Save</button>
       <button type="button" id="rtCancelSettings">Cancel</button>
     </div>
+  </div>
+
+  <div class="keepers-panel" id="keepersPanel" hidden>
+    <div class="keepers-panel-top">
+      <div>
+        <h3>Mark Opponent Keepers</h3>
+        <p class="keepers-panel-sub" id="keepersPanelSub"></p>
+      </div>
+      <button type="button" class="rt-settings-btn" id="closeKeepersPanel">Done</button>
+    </div>
+    <div class="keeper-search-wrap">
+      <input type="text" id="keeperSearchInput" placeholder="Search a player by name…" autocomplete="off">
+      <div class="keeper-search-results" id="keeperSearchResults" hidden></div>
+    </div>
+    <ol class="keepers-added-list" id="keepersAddedList"></ol>
   </div>
 
   <div class="analytics" id="analytics">
@@ -1447,6 +1584,13 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
   const rtTurn = document.getElementById('rtTurn');
   const rtProgressFill = document.getElementById('rtProgressFill');
   const rtSettingsBtn = document.getElementById('rtSettingsBtn');
+  const rtKeepersBtn = document.getElementById('rtKeepersBtn');
+  const keepersPanelEl = document.getElementById('keepersPanel');
+  const keepersPanelSubEl = document.getElementById('keepersPanelSub');
+  const closeKeepersPanelBtn = document.getElementById('closeKeepersPanel');
+  const keeperSearchInput = document.getElementById('keeperSearchInput');
+  const keeperSearchResultsEl = document.getElementById('keeperSearchResults');
+  const keepersAddedListEl = document.getElementById('keepersAddedList');
   const rtSettingsPanel = document.getElementById('rtSettingsPanel');
   const rtTeamsInput = document.getElementById('rtTeamsInput');
   const rtRoundsInput = document.getElementById('rtRoundsInput');
@@ -2000,10 +2144,98 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
     }
   }
 
+  // ---------- opponent keepers (mark other teams' keepers as Taken before the draft) ----------
+  function keepersPanelEntries(){
+    const out = [];
+    ORDER.forEach(pos => {
+      (PLAYERS[pos] || []).forEach(p => {
+        const d = DRAFTED[p.pid];
+        if (d && d.by === 'other' && d.keeper) out.push({ pos, p });
+      });
+    });
+    return out;
+  }
+
+  function searchUnownedPlayers(query){
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const matches = [];
+    ORDER.forEach(pos => {
+      (PLAYERS[pos] || []).forEach(p => {
+        if (DRAFTED[p.pid]) return; // already Mine/Taken — not eligible to add here
+        if (p.name.toLowerCase().includes(q)) matches.push({ pos, p });
+      });
+    });
+    matches.sort((a, b) => {
+      const aAdp = a.p.adp === null ? Infinity : a.p.adp;
+      const bAdp = b.p.adp === null ? Infinity : b.p.adp;
+      return aAdp - bAdp;
+    });
+    return matches.slice(0, 8);
+  }
+
+  async function addOpponentKeeper(pid){
+    const prevEntry = DRAFTED[pid] || null;
+    const value = { by: 'other', at: Date.now(), keeper: true };
+    DRAFTED[pid] = value;
+    refreshMyTeamChip();
+    renderCurrentView();
+    try {
+      await updateDoc(draftDocRef, { [`drafted.${pid}`]: value });
+    } catch(err){
+      if (prevEntry) DRAFTED[pid] = prevEntry; else delete DRAFTED[pid];
+      refreshMyTeamChip();
+      renderCurrentView();
+    }
+  }
+
+  function renderKeeperSearchResults(results){
+    if (results.length === 0){
+      keeperSearchResultsEl.hidden = true;
+      keeperSearchResultsEl.innerHTML = '';
+      return;
+    }
+    keeperSearchResultsEl.hidden = false;
+    keeperSearchResultsEl.innerHTML = results.map(({pos, p}) => `
+      <button type="button" class="keeper-result" data-pid="${p.pid}">
+        <span class="postag" style="background:${POS_META[pos].color}">${pos}</span>
+        <span class="keeper-result-name">${esc(p.name)}</span>
+        <span class="keeper-result-team">${esc(p.team)}</span>
+      </button>`).join('');
+    keeperSearchResultsEl.querySelectorAll('.keeper-result').forEach(btn => {
+      btn.addEventListener('click', () => {
+        addOpponentKeeper(btn.dataset.pid);
+        keeperSearchInput.value = '';
+        keeperSearchResultsEl.hidden = true;
+        keeperSearchResultsEl.innerHTML = '';
+        keeperSearchInput.focus();
+      });
+    });
+  }
+
+  function renderKeepersPanel(){
+    const entries = keepersPanelEntries();
+    const otherTeams = Math.max(0, LEAGUE.teams - 1);
+    keepersPanelSubEl.textContent = `${entries.length} marked so far — up to ${otherTeams * 2} expected (${otherTeams} other teams × 2 keepers). Search a player below to mark them; they'll drop off the board like any other pick.`;
+    keepersAddedListEl.innerHTML = entries.length === 0
+      ? '<li class="keepers-empty">None marked yet.</li>'
+      : entries.map(({pos, p}) => `
+        <li class="keepers-added-item">
+          <span class="postag" style="background:${POS_META[pos].color}">${pos}</span>
+          <span class="keepers-added-name">${esc(p.name)}</span>
+          <span class="keepers-added-team">${esc(p.team)}</span>
+          <button type="button" class="keepers-remove" data-pid="${p.pid}" aria-label="Remove ${esc(p.name)} from opponent keepers" title="Remove">×</button>
+        </li>`).join('');
+    keepersAddedListEl.querySelectorAll('.keepers-remove').forEach(btn => {
+      btn.addEventListener('click', () => setOwner(btn.dataset.pid, 'other'));
+    });
+  }
+
   function refreshMyTeamChip(){
     myTeamChip.textContent = String(myTeamCount());
     renderRoundTracker();
     renderAnalytics();
+    renderKeepersPanel();
   }
 
   // All players, every position, ranked by overall ADP (lowest = best/earliest).
@@ -2266,8 +2498,32 @@ const firestoreDb = getFirestore(initializeApp(firebaseConfig));
   rtSettingsBtn.addEventListener('click', () => {
     if (rtSettingsPanel.hidden) openSettingsPanel();
     else rtSettingsPanel.hidden = true;
+    keepersPanelEl.hidden = true;
   });
   rtCancelSettings.addEventListener('click', () => { rtSettingsPanel.hidden = true; });
+
+  rtKeepersBtn.addEventListener('click', () => {
+    if (keepersPanelEl.hidden){
+      keepersPanelEl.hidden = false;
+      rtSettingsPanel.hidden = true;
+      renderKeepersPanel();
+      keeperSearchInput.value = '';
+      keeperSearchResultsEl.hidden = true;
+      keeperSearchInput.focus();
+    } else {
+      keepersPanelEl.hidden = true;
+    }
+  });
+  closeKeepersPanelBtn.addEventListener('click', () => { keepersPanelEl.hidden = true; });
+  keeperSearchInput.addEventListener('input', () => {
+    renderKeeperSearchResults(searchUnownedPlayers(keeperSearchInput.value));
+  });
+  keeperSearchInput.addEventListener('focus', () => {
+    if (keeperSearchInput.value.trim().length >= 2) renderKeeperSearchResults(searchUnownedPlayers(keeperSearchInput.value));
+  });
+  keeperSearchInput.addEventListener('blur', () => {
+    setTimeout(() => { keeperSearchResultsEl.hidden = true; }, 150);
+  });
 
   rtSaveSettings.addEventListener('click', async () => {
     const teams = Math.max(2, Math.min(32, parseInt(rtTeamsInput.value, 10) || LEAGUE.teams));

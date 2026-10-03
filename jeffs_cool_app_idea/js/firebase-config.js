@@ -9,10 +9,10 @@
 // config.)
 
 export const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_PROJECT_ID.appspot.com',
-  messagingSenderId: 'YOUR_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: 'AIzaSyAgiDZ9MhaFNKhhFK79cT62KlMmuTU4pEY',
+  authDomain: 'homebase-333d0.firebaseapp.com',
+  projectId: 'homebase-333d0',
+  storageBucket: 'homebase-333d0.firebasestorage.app',
+  messagingSenderId: '49872907097',
+  appId: '1:49872907097:web:0d9035b7be3e2d1722fa48',
 };

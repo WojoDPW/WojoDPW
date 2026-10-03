@@ -37,12 +37,18 @@ body {
   text-align: center;
   line-height: 0;
 }
-.header-banner a { display: inline-block; }
+/* The link must have a definite width (not shrink-to-fit inline-block) —
+   otherwise the img's own `width: 100%` has no unambiguous size to resolve
+   against, and some browsers (notably mobile Safari) fall back to the
+   image's native pixel size instead of scaling it to the viewport. */
+.header-banner a { display: block; width: 100%; }
 .banner-logo {
+  display: block;
   width: 100%;
+  max-width: 100%;
   height: auto;
   max-height: 160px;
-  display: inline-block;
+  margin: 0 auto;
 }
 
 .header-nav-bar {

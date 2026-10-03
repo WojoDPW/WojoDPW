@@ -9,6 +9,9 @@ import { saveRoom, saveEquipment } from './data.js';
 export async function importLegacyBackup(file, propertyId, { onProgress } = {}) {
   const text = await file.text();
   const payload = JSON.parse(text);
+  // 'jeffs-cool-app-idea' is what that original version's exports actually
+  // say — it's a historical format marker, not the app's current name, so
+  // it's intentionally left unchanged by the rename to Big House BluePrint.
   if (payload.app !== 'jeffs-cool-app-idea') {
     throw new Error('This file does not look like a backup from this app.');
   }

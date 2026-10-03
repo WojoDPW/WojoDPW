@@ -204,7 +204,7 @@ function render() {
 function renderAuth() {
   return `
     <section class="panel auth-panel">
-      <h1>🏠 Jeff's Cool App Idea</h1>
+      <h1>🏠 Big House BluePrint</h1>
       <p class="muted">Sign in or create an account to access your home inventory.</p>
       <div class="auth-tabs">
         <button class="btn ghost auth-tab active" data-mode="signin">Sign in</button>

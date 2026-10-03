@@ -41,7 +41,7 @@ function freqForUnit(unit) {
 function buildTaskEvent(equipment, room, task) {
   const lines = [];
   lines.push('BEGIN:VEVENT');
-  lines.push(`UID:${task.id}@jeffs-cool-app-idea`);
+  lines.push(`UID:${task.id}@big-house-blueprint`);
   lines.push(`DTSTAMP:${dateStamp(task.anchorDate || task.nextDue)}T000000Z`);
   lines.push(`DTSTART;VALUE=DATE:${dateStamp(task.anchorDate || task.nextDue)}`);
   const summary = `Maintenance: ${equipment.name} — ${task.title}`;
@@ -72,7 +72,7 @@ function buildWarrantyEvent(equipment) {
   if (!expiration) return [];
   const lines = [];
   lines.push('BEGIN:VEVENT');
-  lines.push(`UID:warranty-${equipment.id}@jeffs-cool-app-idea`);
+  lines.push(`UID:warranty-${equipment.id}@big-house-blueprint`);
   lines.push(`DTSTAMP:${dateStamp(expiration)}T000000Z`);
   lines.push(`DTSTART;VALUE=DATE:${dateStamp(expiration)}`);
   lines.push(`SUMMARY:Warranty expires: ${equipment.name}`);
@@ -89,7 +89,7 @@ export function buildICS(equipmentList, roomsById) {
   const lines = [];
   lines.push('BEGIN:VCALENDAR');
   lines.push('VERSION:2.0');
-  lines.push('PRODID:-//Jeffs Cool App Idea//Home Maintenance//EN');
+  lines.push('PRODID:-//Big House BluePrint//Home Maintenance//EN');
   lines.push('CALSCALE:GREGORIAN');
   for (const equipment of equipmentList) {
     const room = equipment.roomId ? roomsById.get(equipment.roomId) : null;

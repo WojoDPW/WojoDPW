@@ -2,6 +2,7 @@ import { openModal, closeModal } from './modal.js';
 import { uuid, todayISO, escapeHtml } from './utils.js';
 import { identifyFromImage } from './ai-identify.js';
 import { getLocalSetting } from './local-settings.js';
+import { isMapsConfigured, mountAddressAutocomplete } from './maps.js';
 
 const CATEGORIES = [
   'HVAC',
@@ -27,17 +28,44 @@ function field(label, inputHtml, { hint } = {}) {
 export function openPropertyForm(property, { onSave }) {
   const isNew = !property;
   const p = property || { name: '', address: '' };
+
+  const addressFieldHtml = isMapsConfigured
+    ? `<label class="field">
+        <span>Address</span>
+        <div id="address-autocomplete-container"></div>
+        <input type="hidden" name="address" id="address-hidden-input" value="${escapeHtml(p.address || '')}">
+        <small class="hint" id="address-hint">${p.address ? `Current: ${escapeHtml(p.address)}. Search above to change it.` : 'Start typing and pick your address from the list.'}</small>
+      </label>`
+    : field('Address', `<input name="address" value="${escapeHtml(p.address || '')}">`);
+
   const card = openModal(`
     <h2>${isNew ? 'Add a property' : 'Edit property'}</h2>
     <form id="property-form" class="form-grid">
       ${field('Property name', `<input name="name" required value="${escapeHtml(p.name)}" placeholder="The Smith House, 123 Main St...">`)}
-      ${field('Address', `<input name="address" value="${escapeHtml(p.address || '')}">`)}
+      ${addressFieldHtml}
       <div class="form-actions">
         <button type="button" class="btn ghost" data-close>Cancel</button>
         <button type="submit" class="btn primary">${isNew ? 'Create property' : 'Save'}</button>
       </div>
     </form>
   `);
+
+  if (isMapsConfigured) {
+    const container = card.querySelector('#address-autocomplete-container');
+    const hiddenInput = card.querySelector('#address-hidden-input');
+    const hint = card.querySelector('#address-hint');
+    mountAddressAutocomplete(container, {
+      onSelect: (formattedAddress) => {
+        hiddenInput.value = formattedAddress;
+        hint.textContent = `Will save: ${formattedAddress}`;
+      },
+    }).catch((err) => {
+      console.error('Address autocomplete unavailable, falling back to plain text:', err);
+      container.innerHTML = `<input name="address" value="${escapeHtml(hiddenInput.value)}">`;
+      hiddenInput.remove();
+      hint.textContent = '';
+    });
+  }
 
   card.querySelector('#property-form').addEventListener('submit', async (e) => {
     e.preventDefault();

@@ -1,0 +1,143 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function verifiedEmail() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function isMember(propertyId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/properties/$(propertyId)/members/$(request.auth.uid));
+    }
+    function myRole(propertyId) {
+      return get(/databases/$(database)/documents/properties/$(propertyId)/members/$(request.auth.uid)).data.role;
+    }
+    function isOwner(propertyId) {
+      return isMember(propertyId) && myRole(propertyId) == 'owner';
+    }
+    function hasPendingInvite(propertyId) {
+      return verifiedEmail() &&
+        exists(/databases/$(database)/documents/invites/$(propertyId + '__' + myEmail())) &&
+        get(/databases/$(database)/documents/invites/$(propertyId + '__' + myEmail())).data.status == 'pending';
+    }
+    function hasPendingTransfer(propertyId) {
+      return verifiedEmail() &&
+        exists(/databases/$(database)/documents/transferRequests/$(propertyId + '__' + myEmail())) &&
+        get(/databases/$(database)/documents/transferRequests/$(propertyId + '__' + myEmail())).data.status == 'pending';
+    }
+
+    // ---------- users ----------
+    match /users/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+
+      // Denormalized index: "which properties do I belong to".
+      match /memberships/{propertyId} {
+        allow read: if isSignedIn() && request.auth.uid == uid;
+        allow create, update: if isSignedIn() && request.auth.uid == uid;
+        allow delete: if isSignedIn() && (request.auth.uid == uid || hasPendingTransfer(propertyId));
+      }
+    }
+
+    // ---------- properties ----------
+    match /properties/{propertyId} {
+      allow read: if isMember(propertyId) || hasPendingInvite(propertyId) || hasPendingTransfer(propertyId);
+
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+
+      // Owner can edit name/address. A buyer accepting a pending transfer may
+      // only flip ownerUid/ownerEmail — nothing else.
+      allow update: if
+        (isOwner(propertyId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'address'])) ||
+        (hasPendingTransfer(propertyId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid', 'ownerEmail']));
+
+      allow delete: if isOwner(propertyId);
+
+      match /members/{memberUid} {
+        allow read: if isMember(propertyId) || hasPendingInvite(propertyId) || hasPendingTransfer(propertyId);
+
+        allow create: if isSignedIn() && memberUid == request.auth.uid && (
+          // Claiming the owner slot on a brand-new property (it doesn't exist yet).
+          (request.resource.data.role == 'owner' &&
+            !exists(/databases/$(database)/documents/properties/$(propertyId))) ||
+          // Buyer accepting a pending ownership transfer.
+          (request.resource.data.role == 'owner' && hasPendingTransfer(propertyId)) ||
+          // Invitee accepting a pending view-only invite.
+          (request.resource.data.role == 'viewer' && hasPendingInvite(propertyId))
+        );
+
+        allow delete: if isOwner(propertyId) || memberUid == request.auth.uid || hasPendingTransfer(propertyId);
+        allow update: if false;
+      }
+
+      match /rooms/{roomId} {
+        allow read: if isMember(propertyId);
+        allow write: if isOwner(propertyId);
+      }
+
+      match /equipment/{equipmentId} {
+        allow read: if isMember(propertyId);
+        allow write: if isOwner(propertyId);
+      }
+    }
+
+    // ---------- invites (family, view-only) ----------
+    match /invites/{inviteId} {
+      allow read: if isSignedIn() && (
+        (verifiedEmail() && resource.data.email == myEmail()) ||
+        isOwner(resource.data.propertyId)
+      );
+
+      allow create: if isSignedIn() &&
+        isOwner(request.resource.data.propertyId) &&
+        inviteId == request.resource.data.propertyId + '__' + request.resource.data.email &&
+        request.resource.data.status == 'pending';
+
+      // Only the invited (verified) email can flip pending -> accepted, and
+      // only that one field (plus a timestamp) may change.
+      allow update: if isSignedIn() && verifiedEmail() &&
+        resource.data.email == myEmail() &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'accepted' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt']);
+
+      // Owner can revoke; the invited (verified) email can decline.
+      allow delete: if isOwner(resource.data.propertyId) ||
+        (verifiedEmail() && resource.data.email == myEmail());
+    }
+
+    // ---------- ownership transfer ----------
+    match /transferRequests/{transferId} {
+      allow read: if isSignedIn() && (
+        (verifiedEmail() && resource.data.toEmail == myEmail()) ||
+        isOwner(resource.data.propertyId)
+      );
+
+      allow create: if isSignedIn() &&
+        isOwner(request.resource.data.propertyId) &&
+        request.resource.data.fromUid == request.auth.uid &&
+        transferId == request.resource.data.propertyId + '__' + request.resource.data.toEmail &&
+        request.resource.data.status == 'pending';
+
+      allow update: if isSignedIn() && verifiedEmail() &&
+        resource.data.toEmail == myEmail() &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'accepted' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt']);
+
+      // Owner can cancel a still-pending transfer; the named buyer can decline it.
+      allow delete: if (isOwner(resource.data.propertyId) && resource.data.status == 'pending') ||
+        (verifiedEmail() && resource.data.toEmail == myEmail());
+    }
+  }
+}

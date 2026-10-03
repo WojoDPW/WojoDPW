@@ -1,7 +1,7 @@
 import { openModal, closeModal } from './modal.js';
 import { uuid, todayISO, escapeHtml } from './utils.js';
 import { identifyFromImage } from './ai-identify.js';
-import { SettingsDB } from './db.js';
+import { getLocalSetting } from './local-settings.js';
 
 const CATEGORIES = [
   'HVAC',
@@ -24,6 +24,72 @@ function field(label, inputHtml, { hint } = {}) {
   </label>`;
 }
 
+export function openPropertyForm(property, { onSave }) {
+  const isNew = !property;
+  const p = property || { name: '', address: '' };
+  const card = openModal(`
+    <h2>${isNew ? 'Add a property' : 'Edit property'}</h2>
+    <form id="property-form" class="form-grid">
+      ${field('Property name', `<input name="name" required value="${escapeHtml(p.name)}" placeholder="The Smith House, 123 Main St...">`)}
+      ${field('Address', `<input name="address" value="${escapeHtml(p.address || '')}">`)}
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" class="btn primary">${isNew ? 'Create property' : 'Save'}</button>
+      </div>
+    </form>
+  `);
+
+  card.querySelector('#property-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    await onSave({ name: fd.get('name').trim(), address: fd.get('address').trim() });
+    closeModal();
+  });
+}
+
+export function openInviteForm({ onSave }) {
+  const card = openModal(`
+    <h2>Invite a family member</h2>
+    <p class="muted">They'll get view-only access: they can see rooms, equipment, warranties, manuals, and maintenance, but can't add, edit, or delete anything. They'll need to create an account (or sign in) with this exact email and verify it before they can accept.</p>
+    <form id="invite-form" class="form-grid">
+      ${field('Their email', `<input name="email" type="email" required placeholder="name@example.com">`)}
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" class="btn primary">Send invite</button>
+      </div>
+    </form>
+  `);
+
+  card.querySelector('#invite-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    await onSave(fd.get('email').trim());
+    closeModal();
+  });
+}
+
+export function openTransferForm({ onSave }) {
+  const card = openModal(`
+    <h2>Transfer this property</h2>
+    <p class="muted">For when the house is sold. The person you name will need to create an account (or sign in) with this exact email, verify it, and accept.</p>
+    <p class="error"><strong>Once they accept: you and every family member you've added will immediately and permanently lose all access</strong> to this property's data. This can't be undone — make sure you've exported anything you want to keep first.</p>
+    <form id="transfer-form" class="form-grid">
+      ${field('Buyer\'s email', `<input name="email" type="email" required placeholder="name@example.com">`)}
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" class="btn danger">Start transfer</button>
+      </div>
+    </form>
+  `);
+
+  card.querySelector('#transfer-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    await onSave(fd.get('email').trim());
+    closeModal();
+  });
+}
+
 export function openRoomForm(room, { onSave }) {
   const isNew = !room;
   const r = room || { id: uuid(), name: '', type: '', floor: '', notes: '' };
@@ -41,7 +107,7 @@ export function openRoomForm(room, { onSave }) {
       )}
       <div class="form-actions">
         <button type="button" class="btn ghost" data-close>Cancel</button>
-        <button type="submit" class="btn primary">Save room</button>
+        <button type="submit" class="btn primary" id="room-save-btn">Save room</button>
       </div>
     </form>
   `);
@@ -57,12 +123,17 @@ export function openRoomForm(room, { onSave }) {
       notes: fd.get('notes').trim(),
     };
     const file = fd.get('modelFile');
-    if (file && file.size > 0) {
-      updated.modelBlob = file;
-      updated.modelFileName = file.name;
+    const saveBtn = card.querySelector('#room-save-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = file && file.size > 0 ? 'Uploading…' : 'Saving…';
+    try {
+      await onSave(updated, file && file.size > 0 ? file : null);
+      closeModal();
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save room';
+      alert(`Couldn't save: ${err.message}`);
     }
-    await onSave(updated);
-    closeModal();
   });
 }
 
@@ -186,7 +257,7 @@ export function openEquipmentForm(equipment, rooms, { onSave }) {
       ${field('Notes', `<textarea name="notes" rows="3">${escapeHtml(e0.notes)}</textarea>`)}
       <div class="form-actions">
         <button type="button" class="btn ghost" data-close>Cancel</button>
-        <button type="submit" class="btn primary">Save</button>
+        <button type="submit" class="btn primary" id="equipment-save-btn">Save</button>
       </div>
     </form>
   `);
@@ -201,8 +272,8 @@ export function openEquipmentForm(equipment, rooms, { onSave }) {
     }
     resultBox.innerHTML = `<p class="muted">Looking at the photo…</p>`;
     try {
-      const apiKey = await SettingsDB.get('anthropicApiKey');
-      const model = await SettingsDB.get('aiModel');
+      const apiKey = getLocalSetting('anthropicApiKey');
+      const model = getLocalSetting('aiModel');
       const result = await identifyFromImage(file, { apiKey, model });
       resultBox.innerHTML = `<p class="success">Guess (${escapeHtml(result.confidence || 'unknown')} confidence): ${escapeHtml(
         [result.manufacturer, result.modelNumber].filter(Boolean).join(' ') || 'nothing legible'
@@ -221,7 +292,7 @@ export function openEquipmentForm(equipment, rooms, { onSave }) {
     }
   });
 
-  card.querySelector('#equipment-form').addEventListener('submit', (e) => {
+  card.querySelector('#equipment-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const updated = { ...e0 };
@@ -234,23 +305,29 @@ export function openEquipmentForm(equipment, rooms, { onSave }) {
     ]) {
       updated[key] = (fd.get(key) || '').toString().trim();
     }
-    const photoFile = fd.get('photoFile');
-    if (photoFile && photoFile.size > 0) {
-      updated.photoBlob = photoFile;
-    }
     if (!updated.maintenanceTasks) updated.maintenanceTasks = [];
-    onSave(updated);
-    closeModal();
+    const photoFile = fd.get('photoFile');
+    const saveBtn = card.querySelector('#equipment-save-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = photoFile && photoFile.size > 0 ? 'Uploading…' : 'Saving…';
+    try {
+      await onSave(updated, photoFile && photoFile.size > 0 ? photoFile : null);
+      closeModal();
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+      alert(`Couldn't save: ${err.message}`);
+    }
   });
 }
 
-export function confirmDialog(message, { onConfirm }) {
+export function confirmDialog(message, { onConfirm, confirmLabel = 'Delete' }) {
   const card = openModal(`
     <h2>Are you sure?</h2>
     <p>${escapeHtml(message)}</p>
     <div class="form-actions">
       <button type="button" class="btn ghost" data-close>Cancel</button>
-      <button type="button" class="btn danger" id="confirm-yes">Delete</button>
+      <button type="button" class="btn danger" id="confirm-yes">${escapeHtml(confirmLabel)}</button>
     </div>
   `);
   card.querySelector('#confirm-yes').addEventListener('click', () => {

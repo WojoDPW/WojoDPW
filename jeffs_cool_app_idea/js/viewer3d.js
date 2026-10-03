@@ -78,24 +78,18 @@ export async function createRoomViewer(container) {
     }
   }
 
-  async function loadModel(blob, format) {
+  async function loadModel(url, format) {
     clearModel();
-    const url = URL.createObjectURL(blob);
-    try {
-      if (format === 'obj') {
-        const loader = new OBJLoader();
-        const object = await loader.loadAsync(url);
-        currentModel = object;
-      } else {
-        const loader = new GLTFLoader();
-        const gltf = await loader.loadAsync(url);
-        currentModel = gltf.scene;
-      }
-      scene.add(currentModel);
-      frameObject(currentModel);
-    } finally {
-      URL.revokeObjectURL(url);
+    if (format === 'obj') {
+      const loader = new OBJLoader();
+      currentModel = await loader.loadAsync(url);
+    } else {
+      const loader = new GLTFLoader();
+      const gltf = await loader.loadAsync(url);
+      currentModel = gltf.scene;
     }
+    scene.add(currentModel);
+    frameObject(currentModel);
   }
 
   function resize() {

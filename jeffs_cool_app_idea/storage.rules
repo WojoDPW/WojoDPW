@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isMember(propertyId) {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/properties/$(propertyId)/members/$(request.auth.uid));
+    }
+    function isOwner(propertyId) {
+      return isMember(propertyId) &&
+        firestore.get(/databases/(default)/documents/properties/$(propertyId)/members/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    match /properties/{propertyId}/equipment/{equipmentId}/{fileName} {
+      allow read: if isMember(propertyId);
+      allow write: if isOwner(propertyId) &&
+        request.resource.size < 15 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow delete: if isOwner(propertyId);
+    }
+
+    match /properties/{propertyId}/rooms/{roomId}/{fileName} {
+      allow read: if isMember(propertyId);
+      allow write: if isOwner(propertyId) && request.resource.size < 150 * 1024 * 1024;
+      allow delete: if isOwner(propertyId);
+    }
+  }
+}

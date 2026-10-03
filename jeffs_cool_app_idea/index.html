@@ -9,7 +9,11 @@
   {
     "imports": {
       "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+      "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
+      "firebase/storage": "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"
     }
   }
   </script>
@@ -17,13 +21,17 @@
 <body>
   <header class="app-header">
     <h1 class="brand">🏠 Jeff's Cool App Idea</h1>
-    <nav class="nav-tabs">
+    <nav class="nav-tabs" id="nav-tabs" style="display:none">
       <button class="nav-tab active" data-route="dashboard">Dashboard</button>
       <button class="nav-tab" data-route="rooms">Rooms</button>
       <button class="nav-tab" data-route="equipment">Equipment</button>
       <button class="nav-tab" data-route="maintenance">Maintenance</button>
       <button class="nav-tab" data-route="settings">Settings</button>
     </nav>
+    <div id="app-header-signed-in" class="header-actions" style="display:none">
+      <button class="btn ghost" id="properties-nav-btn">Properties <span id="notification-badge" class="badge danger" style="display:none"></span></button>
+      <button class="btn ghost" id="signout-btn">Sign out</button>
+    </div>
   </header>
 
   <main id="main" class="app-main"></main>

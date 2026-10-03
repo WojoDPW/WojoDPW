@@ -58,15 +58,6 @@ export function warrantyExpiration(item) {
   return null;
 }
 
-export function blobToObjectURL(blob) {
-  if (!blob) return null;
-  return URL.createObjectURL(blob);
-}
-
-export async function fileToBlob(file) {
-  return file; // File is already a Blob subtype; kept for readability at call sites.
-}
-
 export function debounce(fn, wait = 200) {
   let t;
   return (...args) => {

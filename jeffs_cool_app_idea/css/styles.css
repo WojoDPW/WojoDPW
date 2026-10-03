@@ -207,3 +207,21 @@ input, select, textarea {
   .room-detail-grid { grid-template-columns: 1fr; }
   .equipment-list.wide .equipment-row { grid-template-columns: 1fr; }
 }
+
+.header-actions { display: flex; gap: 8px; align-items: center; }
+.header-actions .badge { margin-left: 6px; }
+
+.auth-panel { max-width: 420px; margin: 40px auto; text-align: center; }
+.auth-tabs { display: flex; gap: 8px; justify-content: center; margin: 14px 0; }
+.auth-tabs .auth-tab.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.auth-panel .form-grid { text-align: left; }
+
+.warning-panel { border-color: rgba(230,185,79,0.4); background: rgba(230,185,79,0.06); }
+
+.invite-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 12px; border: 1px solid var(--panel-border); border-radius: 8px; margin-bottom: 10px; flex-wrap: wrap;
+}
+
+.property-card { cursor: pointer; }
+.property-card:hover { border-color: var(--accent); }

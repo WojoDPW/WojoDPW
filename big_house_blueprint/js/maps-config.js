@@ -14,6 +14,6 @@
 // Leaving this as the placeholder simply disables autocomplete: the
 // property form falls back to a plain text address field, nothing breaks.
 
-export const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
+export const GOOGLE_MAPS_API_KEY = 'AIzaSyDNpERxwLAgelSzUl5pBxoVBYLSbtFh79Q';
 
 export const isMapsConfigured = GOOGLE_MAPS_API_KEY !== 'YOUR_GOOGLE_MAPS_API_KEY';

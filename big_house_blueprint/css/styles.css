@@ -35,7 +35,15 @@ body {
   z-index: 10;
 }
 
-.brand { margin: 0; font-size: 1.1rem; }
+.brand { margin: 0; line-height: 0; }
+.brand-logo {
+  height: 36px;
+  width: auto;
+  display: block;
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
 
 .nav-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 
@@ -211,10 +219,34 @@ input, select, textarea {
 .header-actions { display: flex; gap: 8px; align-items: center; }
 .header-actions .badge { margin-left: 6px; }
 
-.auth-panel { max-width: 420px; margin: 40px auto; text-align: center; }
+/* Auth and welcome are the two "landing" screens — styled light to host
+   the logo banner (which has its own light background) without a visible
+   seam, instead of the dark panel the rest of the app uses. */
+.auth-panel, .welcome-panel {
+  max-width: 460px;
+  margin: 40px auto;
+  text-align: center;
+  background: #fff;
+  color: #0a1020;
+  border-color: #e3e7ee;
+}
+.auth-panel .muted, .welcome-panel .muted { color: #5b6472; }
+.auth-logo, .welcome-logo { width: 100%; max-width: 380px; height: auto; margin: 0 auto 14px; display: block; }
+.welcome-logo { max-width: 440px; }
 .auth-tabs { display: flex; gap: 8px; justify-content: center; margin: 14px 0; }
 .auth-tabs .auth-tab.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .auth-panel .form-grid { text-align: left; }
+.auth-panel .form-grid input, .auth-panel .form-grid textarea, .auth-panel .form-grid select {
+  background: #fff;
+  color: #0a1020;
+  border-color: #d7dce4;
+}
+.auth-panel .field span { color: #5b6472; }
+.auth-panel .btn, .welcome-panel .btn { color: #0a1020; border-color: #d7dce4; }
+.auth-panel .btn.primary, .welcome-panel .btn.primary { color: var(--accent-text); }
+.auth-panel .btn.link, .welcome-panel .btn.link { color: var(--accent); }
+.welcome-panel h1 { margin-top: 4px; }
+.welcome-panel .btn.primary { margin-top: 10px; }
 
 .warning-panel { border-color: rgba(230,185,79,0.4); background: rgba(230,185,79,0.06); }
 

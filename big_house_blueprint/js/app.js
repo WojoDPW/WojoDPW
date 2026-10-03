@@ -38,6 +38,7 @@ const state = {
   search: '',
   roomFilter: '',
   categoryFilter: '',
+  showWelcome: false,
 };
 
 let activeViewer = null;
@@ -66,6 +67,11 @@ async function init() {
     el.addEventListener('click', () => setRoute(el.dataset.route));
   });
   document.getElementById('properties-nav-btn').addEventListener('click', () => setRoute('properties'));
+  document.getElementById('brand-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!state.user) return;
+    setRoute(state.propertyId ? 'dashboard' : 'properties');
+  });
   document.getElementById('signout-btn').addEventListener('click', async () => {
     await signOutUser();
   });
@@ -101,6 +107,14 @@ async function refreshAccessAndRoute() {
   state.pendingInvites = invites;
   state.pendingTransfers = transfers;
   updateNotificationBadge();
+
+  // One-time greeting right after creating a brand-new account — never
+  // shown again once cleared, even on later logins.
+  if (state.showWelcome) {
+    state.showWelcome = false;
+    setRoute('welcome');
+    return;
+  }
 
   if (state.propertyId && memberships.some((m) => m.propertyId === state.propertyId)) {
     setRoute(state.route === 'loading' || state.route === 'auth' || state.route === 'properties' ? 'dashboard' : state.route);
@@ -166,6 +180,10 @@ function render() {
       main.innerHTML = renderAuth();
       wireAuth(main);
       break;
+    case 'welcome':
+      main.innerHTML = renderWelcome();
+      wireWelcome(main);
+      break;
     case 'properties':
       main.innerHTML = renderProperties();
       wireProperties(main);
@@ -204,7 +222,7 @@ function render() {
 function renderAuth() {
   return `
     <section class="panel auth-panel">
-      <h1>🏠 Big House BluePrint</h1>
+      <img src="img/logo-banner.webp" alt="Big House BluePrint" class="auth-logo">
       <p class="muted">Sign in or create an account to access your home inventory.</p>
       <div class="auth-tabs">
         <button class="btn ghost auth-tab active" data-mode="signin">Sign in</button>
@@ -258,14 +276,40 @@ function wireAuth(main) {
     errBox.innerHTML = '';
     try {
       if (mode === 'signup') {
+        state.showWelcome = true;
         await signUp(email, password, fd.get('displayName').trim());
         errBox.innerHTML = `<p class="success">Account created! Check your email to verify it.</p>`;
       } else {
         await signIn(email, password);
       }
     } catch (err) {
+      state.showWelcome = false;
       errBox.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
     }
+  });
+}
+
+// ---------- one-time welcome screen (shown once, right after sign-up) ----------
+
+function renderWelcome() {
+  const name = state.user.displayName || state.user.email;
+  return `
+    <section class="panel welcome-panel">
+      <img src="img/logo-banner.webp" alt="Big House BluePrint" class="welcome-logo">
+      <h1>Welcome, ${escapeHtml(name)}!</h1>
+      <p class="muted">
+        Your account is set up. Next, add your property — then start building
+        out your rooms, registering equipment, and keeping track of
+        warranties and maintenance, all in one place.
+      </p>
+      <button class="btn primary" id="welcome-continue-btn">Get started</button>
+    </section>
+  `;
+}
+
+function wireWelcome(main) {
+  main.querySelector('#welcome-continue-btn').addEventListener('click', () => {
+    refreshAccessAndRoute();
   });
 }
 

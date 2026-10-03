@@ -191,6 +191,17 @@ input, select, textarea {
    and dropdown — we just make sure its container doesn't collapse. */
 #address-autocomplete-container { width: 100%; min-height: 38px; }
 #address-autocomplete-container gmp-place-autocomplete { width: 100%; display: block; }
+/* The widget itself starts out looking empty (it's a fresh search box, not
+   a pre-filled field), so the saved address needs to stay visible on its
+   own rather than being buried in the small muted hint underneath. */
+.current-address-value {
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .warranty-fieldset { border: 1px solid var(--panel-border); border-radius: 8px; padding: 10px 14px; }
 .warranty-fieldset legend { color: var(--muted); font-size: 0.82rem; }

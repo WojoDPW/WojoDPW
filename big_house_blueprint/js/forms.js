@@ -32,9 +32,10 @@ export function openPropertyForm(property, { onSave }) {
   const addressFieldHtml = isMapsConfigured
     ? `<label class="field">
         <span>Address</span>
+        ${p.address ? `<p class="current-address-value" id="address-current-value">${escapeHtml(p.address)}</p>` : ''}
         <div id="address-autocomplete-container"></div>
         <input type="hidden" name="address" id="address-hidden-input" value="${escapeHtml(p.address || '')}">
-        <small class="hint" id="address-hint">${p.address ? `Current: ${escapeHtml(p.address)}. Search above to change it.` : 'Start typing and pick your address from the list.'}</small>
+        <small class="hint" id="address-hint">${p.address ? 'Search above to change it.' : 'Start typing and pick your address from the list.'}</small>
       </label>`
     : field('Address', `<input name="address" value="${escapeHtml(p.address || '')}">`);
 
@@ -58,12 +59,14 @@ export function openPropertyForm(property, { onSave }) {
       onSelect: (formattedAddress) => {
         hiddenInput.value = formattedAddress;
         hint.textContent = `Will save: ${formattedAddress}`;
+        card.querySelector('#address-current-value')?.remove();
       },
     }).catch((err) => {
       console.error('Address autocomplete unavailable, falling back to plain text:', err);
       container.innerHTML = `<input name="address" value="${escapeHtml(hiddenInput.value)}">`;
       hiddenInput.remove();
       hint.textContent = '';
+      card.querySelector('#address-current-value')?.remove();
     });
   }
 

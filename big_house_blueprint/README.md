@@ -1,4 +1,4 @@
-# Jeff's Cool App Idea — Home Inventory
+# Big House BluePrint — Home Inventory
 
 A one-stop digital record of your house and everything in it: rooms (with
 3D scans), an equipment/fixture registry with warranty and support info,
@@ -79,7 +79,7 @@ console error with a one-click "create index" link if that ever happens;
 ```bash
 npm install -g firebase-tools
 firebase login
-cd jeffs_cool_app_idea
+cd big_house_blueprint
 firebase deploy --only firestore:rules,firestore:indexes,storage:rules --project YOUR_PROJECT_ID
 ```
 
@@ -93,7 +93,7 @@ create your property.
 ## Running it locally
 
 ```bash
-cd jeffs_cool_app_idea
+cd big_house_blueprint
 python3 -m http.server 8080
 # then open http://localhost:8080
 ```

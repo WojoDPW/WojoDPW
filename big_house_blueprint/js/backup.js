@@ -8,7 +8,7 @@ import { downloadBlob } from './utils.js';
 // contains work without signing in.
 export function exportPropertyBackup(property, rooms, equipment) {
   const payload = {
-    app: 'jeffs-cool-app-idea',
+    app: 'big-house-blueprint',
     version: 2,
     exportedAt: new Date().toISOString(),
     property: { name: property.name, address: property.address },

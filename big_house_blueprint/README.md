@@ -114,6 +114,7 @@ done against your real project.
 | Warranty status tracking (active/expiring/expired) | ✅ Works |
 | Maintenance scheduling + `.ics` calendar export | ✅ Works |
 | AI photo → make/model identification | ✅ Works, requires your own Anthropic API key |
+| Address autocomplete when adding a property | ✅ Works, requires your own Google Maps API key |
 | Invite family members (view-only access) | ✅ Works |
 | Transfer ownership to a buyer (revokes everyone else's access) | ✅ Works |
 | Live LiDAR capture inside the app | ❌ Not possible from a browser — see below |
@@ -177,6 +178,43 @@ only). A few things worth knowing:
   acceptable trade-off for a personal tool like this one, but don't reuse
   a key you care about scoping tightly.
 - Get a key at [console.anthropic.com](https://console.anthropic.com/).
+
+### Address autocomplete
+
+When adding or editing a property, the **Address** field can offer live
+address suggestions (the same Google Maps-style autocomplete you're used
+to) instead of a plain text box. This is optional — without any setup,
+the field just works as a normal text input, exactly as before.
+
+To turn it on:
+
+1. In the [Google Cloud console](https://console.cloud.google.com/),
+   pick (or create) a project — you can reuse the project tied to your
+   Firebase project, since Firebase projects are Google Cloud projects.
+2. **APIs & Services → Library** → search for **Places API (New)** →
+   **Enable**.
+3. **APIs & Services → Credentials → Create credentials → API key.**
+4. Restrict the key (click into it after creating it) so it can't be
+   copied and abused on your bill:
+   - **API restrictions** → Restrict key → check **Places API (New)**.
+   - **Application restrictions** → **Websites** → add your site's
+     domain(s), e.g. `wojodpw.github.io/*` and `localhost/*` for local
+     testing.
+5. Copy the key into [`js/maps-config.js`](js/maps-config.js), replacing
+   the placeholder value.
+6. In the Google Cloud console, open **Billing** and link a billing
+   account to the project if it isn't already (required for any Maps
+   Platform API, even within the free monthly usage covered by Google's
+   recurring credit). Normal personal use (adding a handful of
+   properties) will stay well within that free tier.
+
+Like the Firebase config, this key is **not a secret** in the sense of
+needing to be hidden — it runs from the browser and is visible in page
+source — but it should still be restricted as above, since an
+unrestricted key is an open invitation for someone else to run up usage
+on your bill. If the key is missing, invalid, or the Places API isn't
+enabled, the form silently falls back to the plain text address field —
+nothing breaks.
 
 ### Migrating data from the original local-only version
 
@@ -242,6 +280,8 @@ firebase.json             Points the Firebase CLI at the two rules files above
 
 js/firebase-config.js    Your Firebase project's web app config (paste yours in)
 js/firebase-init.js      Initializes the Firebase SDK from that config
+js/maps-config.js        Your Google Maps API key for address autocomplete (optional)
+js/maps.js               Loads Google Maps/Places and mounts the autocomplete widget
 js/auth.js               Sign up/in/out, email verification, token refresh
 js/data.js               All Firestore reads/writes (properties, rooms, equipment,
                          members, invites, transfers)

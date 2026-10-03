@@ -186,6 +186,11 @@ input, select, textarea {
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field span { font-size: 0.82rem; color: var(--muted); }
 .hint { color: var(--muted); font-size: 0.78rem; }
+
+/* Google's Place Autocomplete widget renders its own (light-themed) input
+   and dropdown — we just make sure its container doesn't collapse. */
+#address-autocomplete-container { width: 100%; min-height: 38px; }
+#address-autocomplete-container gmp-place-autocomplete { width: 100%; display: block; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .warranty-fieldset { border: 1px solid var(--panel-border); border-radius: 8px; padding: 10px 14px; }
 .warranty-fieldset legend { color: var(--muted); font-size: 0.82rem; }

@@ -1,6 +1,6 @@
 import { isFirebaseConfigured } from './firebase-init.js';
 import {
-  watchAuth, signUp, signIn, signOutUser, resendVerificationEmail, resetPassword,
+  watchAuth, signUp, signIn, signOutUser, resendVerificationEmail, resetPassword, refreshAuthToken,
 } from './auth.js';
 import {
   ensureUserDoc, myMemberships, createProperty, getProperty, updatePropertyDetails,
@@ -86,6 +86,12 @@ async function onAuthChanged(user) {
 }
 
 async function refreshAccessAndRoute() {
+  // Re-fetch profile + force a fresh ID token first: email_verified can go
+  // stale in both the cached User object and the token's own claims (see
+  // refreshAuthToken's comment), and this is called every time pending
+  // invites/transfers are (re-)checked, including after returning from
+  // verifying in another tab without a full page reload.
+  await refreshAuthToken();
   const [memberships, invites, transfers] = await Promise.all([
     myMemberships(state.user.uid),
     state.user.emailVerified ? listPendingInvitesForEmail(state.user.email) : Promise.resolve([]),
@@ -344,7 +350,8 @@ function wireProperties(main) {
   );
   main.querySelectorAll('[data-decline-invite]').forEach((el) =>
     el.addEventListener('click', async () => {
-      await declineInvite(el.dataset.declineInvite);
+      const invite = state.pendingInvites.find((i) => i.id === el.dataset.declineInvite);
+      await declineInvite(invite);
       await refreshAccessAndRoute();
     })
   );
@@ -938,15 +945,16 @@ async function loadMembersPanel(main) {
   }
   const pendingEl = main.querySelector('#pending-invites-list');
   if (pendingEl) {
-    const pending = invites.filter((i) => i.status === 'pending');
-    pendingEl.innerHTML = pending.length ? `<ul class="task-list">${pending.map((inv) => `
+    // Every doc in this mirror collection represents an outstanding invite
+    // by construction — accept/decline/revoke all delete it.
+    pendingEl.innerHTML = invites.length ? `<ul class="task-list">${invites.map((inv) => `
       <li class="task-row">
         <span class="badge warning">pending</span>
         <span>${escapeHtml(inv.email)}</span>
-        <button class="btn link danger" data-revoke-invite="${inv.id}">Revoke</button>
+        <button class="btn link danger" data-revoke-invite="${escapeHtml(inv.email)}">Revoke</button>
       </li>`).join('')}</ul>` : '';
     pendingEl.querySelectorAll('[data-revoke-invite]').forEach((el) =>
-      el.addEventListener('click', async () => { await revokeInvite(el.dataset.revokeInvite); loadMembersPanel(main); })
+      el.addEventListener('click', async () => { await revokeInvite(state.propertyId, el.dataset.revokeInvite); loadMembersPanel(main); })
     );
   }
 }
@@ -958,7 +966,7 @@ async function loadTransferPanel(main) {
     statusEl.innerHTML = `<p>Pending transfer to <strong>${escapeHtml(transfer.toEmail)}</strong></p>
       <button class="btn ghost danger" id="cancel-transfer-btn">Cancel transfer</button>`;
     statusEl.querySelector('#cancel-transfer-btn').addEventListener('click', async () => {
-      await cancelTransfer(transfer.id);
+      await cancelTransfer(transfer);
       loadTransferPanel(main);
     });
   } else {

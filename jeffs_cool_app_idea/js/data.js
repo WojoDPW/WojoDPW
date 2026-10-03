@@ -118,17 +118,25 @@ export function inviteDocId(propertyId, email) {
 
 export async function createInvite(propertyId, propertyName, email, invitedBy) {
   const id = inviteDocId(propertyId, email);
-  await setDoc(doc(db, 'invites', id), {
-    propertyId, propertyName, email: lower(email), role: 'viewer',
+  const emailLower = lower(email);
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'invites', id), {
+    propertyId, propertyName, email: emailLower, role: 'viewer',
     invitedByUid: invitedBy.uid, invitedByEmail: lower(invitedBy.email),
     status: 'pending', createdAt: serverTimestamp(),
   });
+  // Path-scoped mirror so the owner can list pending invites without a
+  // content-filtered query against the top-level invites collection.
+  batch.set(doc(db, `properties/${propertyId}/pendingInvites`, emailLower), {
+    email: emailLower, createdAt: serverTimestamp(),
+  });
+  await batch.commit();
   return id;
 }
 
 export async function listInvitesForProperty(propertyId) {
-  const snap = await getDocs(query(collection(db, 'invites'), where('propertyId', '==', propertyId)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(collection(db, `properties/${propertyId}/pendingInvites`));
+  return snap.docs.map((d) => ({ email: d.id, ...d.data() }));
 }
 
 export async function listPendingInvitesForEmail(email) {
@@ -150,15 +158,23 @@ export async function acceptInvite(invite, user) {
     propertyId: invite.propertyId, propertyName: invite.propertyName, role: 'viewer',
   });
   batch.update(doc(db, 'invites', invite.id), { status: 'accepted', acceptedAt: serverTimestamp() });
+  batch.delete(doc(db, `properties/${invite.propertyId}/pendingInvites`, email));
   await batch.commit();
 }
 
-export async function revokeInvite(inviteId) {
-  await deleteDoc(doc(db, 'invites', inviteId));
+export async function revokeInvite(propertyId, email) {
+  const emailLower = lower(email);
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'invites', inviteDocId(propertyId, emailLower)));
+  batch.delete(doc(db, `properties/${propertyId}/pendingInvites`, emailLower));
+  await batch.commit();
 }
 
-export async function declineInvite(inviteId) {
-  await deleteDoc(doc(db, 'invites', inviteId));
+export async function declineInvite(invite) {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'invites', invite.id));
+  batch.delete(doc(db, `properties/${invite.propertyId}/pendingInvites`, invite.email));
+  await batch.commit();
 }
 
 // ---------- ownership transfer ----------
@@ -169,20 +185,25 @@ export function transferDocId(propertyId, email) {
 
 export async function createTransferRequest(propertyId, propertyName, toEmail, fromUser) {
   const id = transferDocId(propertyId, toEmail);
-  await setDoc(doc(db, 'transferRequests', id), {
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'transferRequests', id), {
     propertyId, propertyName, fromUid: fromUser.uid, fromEmail: lower(fromUser.email),
     toEmail: lower(toEmail), status: 'pending', createdAt: serverTimestamp(),
   });
+  // Tracked on the property itself so the owner can look up the single
+  // active transfer by direct ID (a plain get, never a content-filtered
+  // query against the top-level transferRequests collection).
+  batch.update(doc(db, 'properties', propertyId), { pendingTransferId: id });
+  await batch.commit();
   return id;
 }
 
 export async function getTransferForProperty(propertyId) {
-  const snap = await getDocs(query(
-    collection(db, 'transferRequests'),
-    where('propertyId', '==', propertyId),
-    where('status', '==', 'pending')
-  ));
-  return snap.docs[0] ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null;
+  const property = await getProperty(propertyId);
+  if (!property?.pendingTransferId) return null;
+  const snap = await getDoc(doc(db, 'transferRequests', property.pendingTransferId));
+  if (!snap.exists() || snap.data().status !== 'pending') return null;
+  return { id: snap.id, ...snap.data() };
 }
 
 export async function listPendingTransfersForEmail(email) {
@@ -194,11 +215,17 @@ export async function listPendingTransfersForEmail(email) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-export async function cancelTransfer(transferId) {
-  await deleteDoc(doc(db, 'transferRequests', transferId));
+export async function cancelTransfer(transfer) {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'transferRequests', transfer.id));
+  batch.update(doc(db, 'properties', transfer.propertyId), { pendingTransferId: null });
+  await batch.commit();
 }
 
 export async function declineTransfer(transferId) {
+  // The declining buyer isn't the owner, so they can't clear the property's
+  // pendingTransferId pointer — it's left stale, and getTransferForProperty
+  // already treats a missing/non-pending referenced doc as "no transfer".
   await deleteDoc(doc(db, 'transferRequests', transferId));
 }
 
@@ -211,7 +238,7 @@ export async function acceptTransfer(transfer, buyer) {
   const batch = writeBatch(db);
   const email = lower(buyer.email);
 
-  batch.update(doc(db, 'properties', transfer.propertyId), { ownerUid: buyer.uid, ownerEmail: email });
+  batch.update(doc(db, 'properties', transfer.propertyId), { ownerUid: buyer.uid, ownerEmail: email, pendingTransferId: null });
   batch.set(doc(db, `properties/${transfer.propertyId}/members`, buyer.uid), {
     role: 'owner', email, displayName: buyer.displayName || '', addedAt: serverTimestamp(),
   });

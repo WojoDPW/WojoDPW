@@ -7,6 +7,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   updateProfile,
+  reload,
 } from 'firebase/auth';
 
 export function watchAuth(callback) {
@@ -34,6 +35,21 @@ export async function signOutUser() {
 export async function resendVerificationEmail() {
   if (auth.currentUser) {
     await sendEmailVerification(auth.currentUser);
+  }
+}
+
+// A user's ID token is a JWT whose claims (including email_verified) are
+// fixed at issuance. Verifying the email server-side doesn't retroactively
+// patch an already-cached token or the locally-cached User object —
+// reload() re-fetches the profile (so user.emailVerified is current) and
+// getIdToken(true) forces a fresh token (so Firestore rules checking
+// request.auth.token.email_verified see it too). Call this right before
+// anything gated on verification status, rather than waiting for the SDK's
+// normal ~hourly refresh cycle.
+export async function refreshAuthToken() {
+  if (auth.currentUser) {
+    await reload(auth.currentUser);
+    await auth.currentUser.getIdToken(true);
   }
 }
 

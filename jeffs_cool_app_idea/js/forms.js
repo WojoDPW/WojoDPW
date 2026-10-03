@@ -177,8 +177,13 @@ export function openMaintenanceTaskForm(equipment, task, { onSave }) {
 }
 
 export function openEquipmentForm(equipment, rooms, { onSave }) {
-  const isNew = !equipment;
-  const e0 = equipment || {
+  // `equipment` may be a full record (editing), null (new, no presets), or
+  // a partial object like { roomId } (new, with a preset) — isNew and the
+  // defaults below both key off whether a real .id is present, not mere
+  // truthiness, and any partial fields passed in are overlaid onto the
+  // defaults rather than replacing them wholesale.
+  const isNew = !equipment?.id;
+  const e0 = {
     id: uuid(),
     name: '',
     category: '',
@@ -201,6 +206,7 @@ export function openEquipmentForm(equipment, rooms, { onSave }) {
     manualUrl: '',
     notes: '',
     maintenanceTasks: [],
+    ...equipment,
   };
 
   const roomOptions = `<option value="">— Unassigned —</option>` +

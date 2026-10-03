@@ -16,11 +16,15 @@ service cloud.firestore {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/properties/$(propertyId)/members/$(request.auth.uid));
     }
-    function myRole(propertyId) {
-      return get(/databases/$(database)/documents/properties/$(propertyId)/members/$(request.auth.uid)).data.role;
-    }
+    // Inlined as a single exists()-guarded chain (not isMember() + a second
+    // get()-based function) — splitting the exists() guard and the get().data
+    // dereference across two separate function calls does not reliably
+    // short-circuit, and throws instead of returning false for a
+    // non-member/non-existent property during a `list` query.
     function isOwner(propertyId) {
-      return isMember(propertyId) && myRole(propertyId) == 'owner';
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/properties/$(propertyId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/properties/$(propertyId)/members/$(request.auth.uid)).data.role == 'owner';
     }
     function hasPendingInvite(propertyId) {
       return verifiedEmail() &&
@@ -57,9 +61,9 @@ service cloud.firestore {
       // only flip ownerUid/ownerEmail — nothing else.
       allow update: if
         (isOwner(propertyId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'address'])) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'address', 'pendingTransferId'])) ||
         (hasPendingTransfer(propertyId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid', 'ownerEmail']));
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid', 'ownerEmail', 'pendingTransferId']));
 
       allow delete: if isOwner(propertyId);
 
@@ -89,13 +93,32 @@ service cloud.firestore {
         allow read: if isMember(propertyId);
         allow write: if isOwner(propertyId);
       }
+
+      // Path-scoped mirror of outstanding invites, purely so the owner can
+      // list "who have I invited" via a plain subcollection read (the same
+      // safe shape as rooms/equipment) instead of a content-filtered query
+      // against the top-level invites collection, whose rule necessarily
+      // depends on resource.data — a shape that query planners (and in
+      // particular the local emulator) can require evaluating against a
+      // broader candidate set than the query's own filter would return.
+      match /pendingInvites/{email} {
+        allow read: if isMember(propertyId);
+        allow create: if isOwner(propertyId);
+        allow delete: if isOwner(propertyId) || (verifiedEmail() && email == myEmail());
+        allow update: if false;
+      }
     }
 
     // ---------- invites (family, view-only) ----------
     match /invites/{inviteId} {
-      allow read: if isSignedIn() && (
-        (verifiedEmail() && resource.data.email == myEmail()) ||
-        isOwner(resource.data.propertyId)
+      // `resource != null` guard first, then .get(field, default) instead of
+      // dot-access: a filtered `list` query against a collection with zero
+      // matching (or zero total) documents still evaluates this rule once
+      // with no real document behind it, and dereferencing resource.data or
+      // a missing field throws instead of just failing the check.
+      allow read: if resource != null && isSignedIn() && (
+        (verifiedEmail() && resource.data.get('email', null) == myEmail()) ||
+        isOwner(resource.data.get('propertyId', 'none'))
       );
 
       allow create: if isSignedIn() &&
@@ -118,9 +141,9 @@ service cloud.firestore {
 
     // ---------- ownership transfer ----------
     match /transferRequests/{transferId} {
-      allow read: if isSignedIn() && (
-        (verifiedEmail() && resource.data.toEmail == myEmail()) ||
-        isOwner(resource.data.propertyId)
+      allow read: if resource != null && isSignedIn() && (
+        (verifiedEmail() && resource.data.get('toEmail', null) == myEmail()) ||
+        isOwner(resource.data.get('propertyId', 'none'))
       );
 
       allow create: if isSignedIn() &&

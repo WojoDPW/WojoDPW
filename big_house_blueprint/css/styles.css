@@ -22,6 +22,30 @@ body {
 }
 
 .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Full-width banner, scales fluidly with the viewport (whole image always
+   visible, never cropped) up to a sensible cap so it doesn't dominate wide
+   desktop screens. */
+.header-banner {
+  width: 100%;
+  background: #fff;
+  border-bottom: 1px solid var(--panel-border);
+  text-align: center;
+  line-height: 0;
+}
+.header-banner a { display: inline-block; }
+.banner-logo {
+  width: 100%;
+  height: auto;
+  max-height: 160px;
+  display: inline-block;
+}
+
+.header-nav-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -30,19 +54,6 @@ body {
   padding: 14px 20px;
   background: var(--panel);
   border-bottom: 1px solid var(--panel-border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.brand { margin: 0; line-height: 0; }
-.brand-logo {
-  height: 36px;
-  width: auto;
-  display: block;
-  background: #fff;
-  border-radius: 8px;
-  padding: 4px 8px;
 }
 
 .nav-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
